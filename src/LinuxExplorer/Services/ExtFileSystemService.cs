@@ -17,6 +17,8 @@ public class ExtFileSystemService : IDisposable
     private bool _isReadOnly;
     private bool _disposed;
 
+    private const int CopyBufferSize = 4 * 1024 * 1024; // 4 MB
+
     static ExtFileSystemService()
     {
         DiscUtils.Setup.SetupHelper.RegisterAssembly(typeof(ExtFileSystem).Assembly);
@@ -113,9 +115,8 @@ public class ExtFileSystemService : IDisposable
     {
         EnsureOpen();
 
-        const int bufferSize = 4 * 1024 * 1024; // 4 MB
         using var source = _fileSystem!.OpenFile(ToDiscPath(extPath), FileMode.Open, FileAccess.Read);
-        source.CopyTo(destination, bufferSize);
+        source.CopyTo(destination, CopyBufferSize);
     }
 
     /// <summary>
@@ -127,9 +128,8 @@ public class ExtFileSystemService : IDisposable
         EnsureOpen();
         EnsureWritable();
 
-        const int bufferSize = 4 * 1024 * 1024; // 4 MB
         using var destination = _fileSystem!.OpenFile(ToDiscPath(extPath), FileMode.Create, FileAccess.Write);
-        source.CopyTo(destination, bufferSize);
+        source.CopyTo(destination, CopyBufferSize);
     }
 
     /// <summary>

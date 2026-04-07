@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LinuxExplorer.Helpers;
 using LinuxExplorer.Models;
 using LinuxExplorer.Services;
 using Microsoft.Win32;
@@ -328,7 +329,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var (total, free, used) = _service.GetDiskInfo();
-            DiskInfo = $"Total: {FormatSize(total)}  Free: {FormatSize(free)}  Used: {FormatSize(used)}";
+            DiskInfo = $"Total: {FileSystemHelper.FormatSize(total)}  Free: {FileSystemHelper.FormatSize(free)}  Used: {FileSystemHelper.FormatSize(used)}";
         }
         catch
         {
@@ -397,22 +398,5 @@ public partial class MainViewModel : ObservableObject
         win.Content = stack;
         win.ShowDialog();
         return result;
-    }
-
-    private static string FormatSize(long bytes)
-    {
-        const long KB = 1024;
-        const long MB = KB * 1024;
-        const long GB = MB * 1024;
-        const long TB = GB * 1024;
-
-        return bytes switch
-        {
-            < KB => $"{bytes} B",
-            < MB => $"{bytes / (double)KB:F1} KB",
-            < GB => $"{bytes / (double)MB:F1} MB",
-            < TB => $"{bytes / (double)GB:F1} GB",
-            _ => $"{bytes / (double)TB:F1} TB"
-        };
     }
 }

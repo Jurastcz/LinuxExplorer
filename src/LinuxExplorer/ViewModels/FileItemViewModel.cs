@@ -1,5 +1,6 @@
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
+using LinuxExplorer.Helpers;
 using LinuxExplorer.Models;
 
 namespace LinuxExplorer.ViewModels;
@@ -26,7 +27,7 @@ public partial class FileItemViewModel : ObservableObject
     /// <summary>Human-readable file size (e.g. "4.2 MB").</summary>
     public string SizeDisplay => IsDirectory
         ? string.Empty
-        : FormatSize(_entry.Size);
+        : FileSystemHelper.FormatSize(_entry.Size);
 
     /// <summary>Icon character for the entry type.</summary>
     public string Icon => IsDirectory ? "[DIR]" : GetFileIcon(_entry.Name);
@@ -45,23 +46,6 @@ public partial class FileItemViewModel : ObservableObject
             ".mp3" or ".wav" or ".ogg" or ".flac" => "[AUD]",
             ".mp4" or ".avi" or ".mkv" or ".mov" => "[VID]",
             _ => "[FILE]"
-        };
-    }
-
-    private static string FormatSize(long bytes)
-    {
-        const long KB = 1024;
-        const long MB = KB * 1024;
-        const long GB = MB * 1024;
-        const long TB = GB * 1024;
-
-        return bytes switch
-        {
-            < KB => $"{bytes} B",
-            < MB => $"{bytes / (double)KB:F1} KB",
-            < GB => $"{bytes / (double)MB:F1} MB",
-            < TB => $"{bytes / (double)GB:F1} GB",
-            _ => $"{bytes / (double)TB:F1} TB"
         };
     }
 }
