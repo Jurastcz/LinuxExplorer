@@ -1,0 +1,7 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Icons are provided via Segoe MDL2 Assets font characters in the views.
+        This file is kept as a placeholder for future SVG/PNG icon resources.
+    -->
+</ResourceDictionary>
