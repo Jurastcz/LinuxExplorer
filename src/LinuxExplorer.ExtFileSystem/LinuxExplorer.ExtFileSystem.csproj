@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>LinuxExplorer.ExtFileSystem</AssemblyName>
+    <RootNamespace>LinuxExplorer.ExtFileSystem</RootNamespace>
+  </PropertyGroup>
+
+</Project>
