@@ -9,6 +9,8 @@ public class ExtFileSystemServiceTests : IDisposable
 {
     private readonly ExtFileSystemService _service = new();
 
+    private const int MkfsTimeoutMs = 10_000;
+
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
@@ -41,7 +43,7 @@ public class ExtFileSystemServiceTests : IDisposable
             RedirectStandardError = true,
             UseShellExecute = false
         });
-        mkfs?.WaitForExit(10_000);
+        mkfs?.WaitForExit(MkfsTimeoutMs);
 
         if (mkfs?.ExitCode != 0)
         {

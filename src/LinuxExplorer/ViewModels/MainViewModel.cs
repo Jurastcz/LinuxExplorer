@@ -186,17 +186,17 @@ public partial class MainViewModel : ObservableObject
         }
         else
         {
-            // Multiple files: ask for a destination directory
-            var folderDlg = new OpenFileDialog
+            // Multiple files: ask for a destination directory using a proper folder browser
+            using var folderDlg = new System.Windows.Forms.FolderBrowserDialog
             {
-                Title = "Select destination folder (pick any file in the folder)",
-                CheckFileExists = false,
-                FileName = "Select folder"
+                Description = "Select the destination folder for the copied files",
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = true
             };
 
-            if (folderDlg.ShowDialog() != true) return;
+            if (folderDlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
-            var destDir = Path.GetDirectoryName(folderDlg.FileName) ?? string.Empty;
+            var destDir = folderDlg.SelectedPath;
 
             await LoadWithOverlayAsync(async () =>
             {

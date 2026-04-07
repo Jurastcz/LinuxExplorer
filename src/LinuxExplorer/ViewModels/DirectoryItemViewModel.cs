@@ -68,9 +68,14 @@ public partial class DirectoryItemViewModel : ObservableObject
                 Children.Add(new DirectoryItemViewModel(entry.Name, entry.FullPath, _service, hasChildren: true));
             }
         }
-        catch
+        catch (UnauthorizedAccessException)
         {
-            // Silently ignore errors loading subdirectories
+            // Silently skip directories that are inaccessible (e.g. permission errors);
+            // the tree should remain functional for the directories that can be read.
+        }
+        catch (IOException)
+        {
+            // Silently skip on I/O errors so the tree remains usable.
         }
     }
 

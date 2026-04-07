@@ -277,7 +277,8 @@ public class ExtFileSystemService : IDisposable
     private UnixFileSystemInfo? TryGetUnixInfo(string discPath)
     {
         try { return _fileSystem!.GetUnixFileInfo(discPath); }
-        catch { return null; }
+        catch (NotSupportedException) { return null; }
+        catch (InvalidOperationException) { return null; }
     }
 
     private static string GetFileType(string discPath)
