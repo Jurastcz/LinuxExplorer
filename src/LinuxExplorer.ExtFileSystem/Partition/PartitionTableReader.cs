@@ -1,4 +1,7 @@
+using LinuxExplorer.ExtFileSystem.Ext;
 using LinuxExplorer.ExtFileSystem.RawDisk;
+using System.Reflection.PortableExecutable;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace LinuxExplorer.ExtFileSystem.Partition;
 
@@ -21,20 +24,35 @@ public sealed class PartitionTableReader
     /// <summary>
     /// Reads the partition table and returns all found partitions.
     /// Tries GPT first, then falls back to MBR.
+    /// If no partition table is found, checks for a "superfloppy" ext filesystem
+    /// covering the entire disk (common with USB drives).
     /// </summary>
     public IReadOnlyList<PartitionInfo> ReadPartitions()
     {
-        // Read first two sectors
         byte[] sector0 = _stream.ReadAt(0, SectorSize);
         byte[] sector1 = _stream.ReadAt(SectorSize, SectorSize);
 
-        // Check for GPT signature in sector 1
         ulong sig = BitConverter.ToUInt64(sector1, 0);
-        if (sig == GptSignature)
-            return ReadGptPartitions(sector1);
+        List<PartitionInfo> partitions = new List<PartitionInfo>();
 
-        // Fall back to MBR
-        return ReadMbrPartitions(sector0);
+        if (sig == GptSignature)
+        {
+            partitions = ReadGptPartitions(sector1).ToList();
+        }
+        else
+        {
+            partitions = ReadMbrPartitions(sector0).ToList();
+        }
+
+        // Jeśli nie znaleziono żadnej partycji ext, spróbuj superfloppy
+        if (!partitions.Any(p => p.IsExtFilesystem))
+        {
+            var superfloppy = TryReadSuperfloppyExt();
+            if (superfloppy.Count > 0)
+                return superfloppy;
+        }
+
+        return partitions;
     }
 
     private List<PartitionInfo> ReadMbrPartitions(byte[] mbr)
@@ -57,7 +75,8 @@ public sealed class PartitionTableReader
                 StartOffset = (long)entry.LbaStart * SectorSize,
                 Size = (long)entry.LbaCount * SectorSize,
                 PartitionType = $"0x{entry.Type:X2}",
-                IsExtFilesystem = entry.IsLinuxExt
+                IsExtFilesystem = IsExtFilesystemAtOffset((long)entry.LbaStart * SectorSize),
+                Label = null
             });
         }
 
@@ -66,7 +85,6 @@ public sealed class PartitionTableReader
 
     private List<PartitionInfo> ReadGptPartitions(byte[] gptHeader)
     {
-        // Parse GPT header
         uint partEntrySize = BitConverter.ToUInt32(gptHeader, 84);
         ulong partEntryLba = BitConverter.ToUInt64(gptHeader, 72);
         uint numPartitions = BitConverter.ToUInt32(gptHeader, 80);
@@ -77,7 +95,6 @@ public sealed class PartitionTableReader
         var partitions = new List<PartitionInfo>();
         long tableOffset = (long)partEntryLba * SectorSize;
         int tableSize = (int)(numPartitions * partEntrySize);
-        // Align to sector
         int alignedSize = ((tableSize + SectorSize - 1) / SectorSize) * SectorSize;
         byte[] table = _stream.ReadAt(tableOffset, alignedSize);
 
@@ -88,17 +105,76 @@ public sealed class PartitionTableReader
             var entry = GptPartitionEntry.Parse(table, offset);
             if (entry == null) continue;
 
+            long startOffset = (long)entry.StartLba * SectorSize;
+            bool isExt = IsExtFilesystemAtOffset(startOffset);
+
             partitions.Add(new PartitionInfo
             {
                 Index = idx++,
-                StartOffset = (long)entry.StartLba * SectorSize,
+                StartOffset = startOffset,
                 Size = (long)(entry.EndLba - entry.StartLba + 1) * SectorSize,
                 PartitionType = entry.TypeGuid.ToString("D").ToUpperInvariant(),
-                IsExtFilesystem = entry.IsLinuxFilesystem,
+                IsExtFilesystem = isExt,
                 Label = entry.Name
             });
         }
-
         return partitions;
+    }
+
+    /// <summary>
+    /// Checks if there is an ext2/3/4 filesystem at the given offset by reading the superblock and verifying the magic number.
+    /// </summary>
+    /// <param name="startOffset">The offset at which to check for the filesystem.</param>
+    /// <returns>True if an ext2/3/4 filesystem is found, otherwise false.</returns>
+    private bool IsExtFilesystemAtOffset(long startOffset)
+    {
+        try
+        {
+            byte[] data = _stream.ReadAt(startOffset + Superblock.SuperblockOffset, Superblock.SuperblockSize);
+            ushort magic = BitConverter.ToUInt16(data, 56);
+            return magic == Superblock.Ext2Magic;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+    /// <summary>
+    /// Checks whether the disk is a "superfloppy" – an ext2/3/4 filesystem
+    /// that covers the entire disk without a partition table.
+    /// </summary>
+    private List<PartitionInfo> TryReadSuperfloppyExt()
+    {
+        try
+        {
+            // The ext superblock starts at offset 1024; read enough for magic check
+            int readSize = ((Superblock.SuperblockOffset + Superblock.SuperblockSize + SectorSize - 1) / SectorSize) * SectorSize;
+            byte[] data = _stream.ReadAt(0, readSize);
+
+            // Magic number is at offset 56 within the superblock (absolute offset 1024 + 56 = 1080)
+            ushort magic = BitConverter.ToUInt16(data, Superblock.SuperblockOffset + 56);
+            if (magic != Superblock.Ext2Magic)
+                return [];
+
+            var sb = Superblock.Parse(data.AsSpan(Superblock.SuperblockOffset, Superblock.SuperblockSize).ToArray());
+            long totalSize = (long)sb.BlocksCountLo * sb.BlockSize;
+
+            return
+            [
+                new PartitionInfo
+                {
+                    Index = 0,
+                    StartOffset = 0,
+                    Size = totalSize,
+                    PartitionType = "superfloppy",
+                    IsExtFilesystem = true,
+                    Label = string.IsNullOrEmpty(sb.VolumeName) ? null : sb.VolumeName
+                }
+            ];
+        }
+        catch
+        {
+            return [];
+        }
     }
 }
