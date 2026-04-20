@@ -7,6 +7,7 @@
         xmlns:conv="clr-namespace:LinuxExplorer.Converters"
         mc:Ignorable="d"
         Title="Linux Explorer" Height="700" Width="1100"
+        Icon="/LinuxExplorer.png"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BackgroundBrush}">
 
