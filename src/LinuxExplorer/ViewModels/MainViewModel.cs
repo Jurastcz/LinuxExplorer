@@ -235,7 +235,57 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task Refresh()
     {
-        await LoadDirectoryAsync(CurrentPath);
+        // Save current state
+        string savedPath = CurrentPath;
+        var savedPartitionInfo = _currentPartition?.PartitionInfo;
+
+        // Re-discover disks and partitions
+        IsLoading = true;
+        StatusMessage = "Refreshing disks and partitions...";
+        try
+        {
+            var disks = await Task.Run(() => _diskDiscovery.DiscoverDisks());
+            Disks = new ObservableCollection<DiskViewModel>(disks);
+
+            // Try to find and reopen the same partition
+            if (savedPartitionInfo != null)
+            {
+                foreach (var disk in Disks)
+                {
+                    var partition = disk.Partitions.FirstOrDefault(p =>
+                        p.PartitionInfo.StartOffset == savedPartitionInfo.StartOffset &&
+                        p.PartitionInfo.Size == savedPartitionInfo.Size);
+
+                    if (partition != null)
+                    {
+                        await OpenPartitionAsync(partition);
+                        if (!string.IsNullOrEmpty(savedPath))
+                            await LoadDirectoryAsync(savedPath);
+                        return;
+                    }
+                }
+            }
+
+            // If partition not found, just reload current directory
+            if (!string.IsNullOrEmpty(CurrentPath) && _currentPartition != null)
+            {
+                await LoadDirectoryAsync(CurrentPath);
+            }
+            else
+            {
+                StatusMessage = Disks.Count == 0
+                    ? "No ext partitions found. Run as Administrator."
+                    : $"Found {Disks.Count} disk(s) with ext partitions.";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Refresh failed: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
     }
 
     [RelayCommand]

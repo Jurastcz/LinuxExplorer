@@ -34,13 +34,19 @@ public sealed class RawDiskAccess : IDisposable
 
         uint share = NativeMethods.FILE_SHARE_READ | NativeMethods.FILE_SHARE_WRITE;
 
+        // For write mode use WRITE_THROUGH (bypasses cache but doesn't require sector alignment
+        // or volume locking). For read-only mode keep NO_BUFFERING for performance.
+        uint flags = readOnly
+            ? NativeMethods.FILE_ATTRIBUTE_NORMAL | NativeMethods.FILE_FLAG_NO_BUFFERING
+            : NativeMethods.FILE_ATTRIBUTE_NORMAL | NativeMethods.FILE_FLAG_WRITE_THROUGH;
+
         _handle = NativeMethods.CreateFile(
             path,
             access,
             share,
             nint.Zero,
             NativeMethods.OPEN_EXISTING,
-            NativeMethods.FILE_ATTRIBUTE_NORMAL | NativeMethods.FILE_FLAG_NO_BUFFERING,
+            flags,
             nint.Zero);
 
         if (_handle == NativeMethods.INVALID_HANDLE_VALUE)

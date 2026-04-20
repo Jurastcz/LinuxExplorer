@@ -1,0 +1,116 @@
+<Window x:Class="LinuxExplorer.Views.FormatDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:LinuxExplorer.ViewModels"
+        Title="Format Partition — ext2/ext3/ext4" Height="580" Width="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{StaticResource BackgroundBrush}">
+
+    <Window.DataContext>
+        <vm:FormatViewModel/>
+    </Window.DataContext>
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </Window.Resources>
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Disk selection -->
+        <TextBlock Grid.Row="0" Text="Disk:" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <ComboBox Grid.Row="1" ItemsSource="{Binding Disks}" SelectedItem="{Binding SelectedDisk}"
+                  DisplayMemberPath="DisplayName" Margin="0,0,0,10"
+                  IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"/>
+
+        <!-- Partition selection -->
+        <TextBlock Grid.Row="2" Text="Partition:" FontWeight="SemiBold" Margin="0,0,0,4"
+                   Visibility="{Binding HasPartitions, Converter={StaticResource BoolToVis}}"/>
+        <ComboBox Grid.Row="3" ItemsSource="{Binding Partitions}" SelectedItem="{Binding SelectedPartition}"
+                   DisplayMemberPath="DisplayName" Margin="0,0,0,8"
+                   IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"
+                   Visibility="{Binding HasPartitions, Converter={StaticResource BoolToVis}}"/>
+
+        <!-- Create partition panel -->
+        <GroupBox Grid.Row="4" Header="Create Partition" Margin="0,0,0,8"
+                  Foreground="{StaticResource PrimaryTextBrush}"
+                  BorderBrush="{StaticResource BorderBrush}">
+            <StackPanel Margin="6">
+                <TextBlock Text="{Binding FreeSpaceText}" Margin="0,0,0,6" FontSize="11"/>
+
+                <!-- Slider -->
+                <Slider Value="{Binding NewPartitionSize}" Minimum="1"
+                        Maximum="{Binding MaxPartitionSize}" SmallChange="0.1" LargeChange="1"
+                        TickFrequency="1" Margin="0,0,0,6"
+                        IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"/>
+
+                <!-- Size input row -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Partition Size:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBox Grid.Column="1" Text="{Binding NewPartitionSize, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:F2}}"
+                             VerticalContentAlignment="Center"
+                             IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"/>
+                    <ComboBox Grid.Column="2" ItemsSource="{Binding AvailableSizeUnits}"
+                              SelectedItem="{Binding SelectedSizeUnit}" Width="60" Margin="4,0,0,0"
+                              IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"/>
+                </Grid>
+
+                <Button Content="Create Partition" Command="{Binding CreatePartitionCommand}"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        HorizontalAlignment="Right" Margin="0,8,0,0"
+                        IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Ext version -->
+        <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Filesystem:" FontWeight="SemiBold" VerticalAlignment="Center" Width="90"/>
+            <ComboBox ItemsSource="{Binding AvailableVersions}" SelectedItem="{Binding SelectedVersion}"
+                      Width="100" IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"/>
+            <TextBlock Text="Block size:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="20,0,5,0"/>
+            <ComboBox ItemsSource="{Binding AvailableBlockSizes}" SelectedItem="{Binding SelectedBlockSize}"
+                      Width="80" IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"/>
+        </StackPanel>
+
+        <!-- Volume label -->
+        <StackPanel Grid.Row="6" Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Volume label:" FontWeight="SemiBold" VerticalAlignment="Center" Width="90"/>
+            <TextBox Text="{Binding VolumeLabel, UpdateSourceTrigger=PropertyChanged}" Width="200" MaxLength="16"
+                     IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"/>
+        </StackPanel>
+
+        <!-- Progress -->
+        <ProgressBar Grid.Row="7" Value="{Binding Progress}" Minimum="0" Maximum="100" Height="22" Margin="0,0,0,8"/>
+
+        <!-- Status -->
+        <TextBlock Grid.Row="8" Text="{Binding StatusMessage}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="10" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Format" Command="{Binding FormatPartitionCommand}" Width="90" Margin="0,0,10,0"
+                    Style="{StaticResource PrimaryButtonStyle}"
+                    IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"/>
+            <Button Content="Close" Width="90" Click="CloseButton_Click"
+                    Style="{StaticResource PrimaryButtonStyle}"/>
+        </StackPanel>
+    </Grid>
+</Window>

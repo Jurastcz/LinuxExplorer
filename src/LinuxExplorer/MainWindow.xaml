@@ -49,8 +49,9 @@
                 <MenuItem Header="_Details" IsCheckable="True" IsChecked="{Binding IsDetailsView}"/>
             </MenuItem>
             <MenuItem Header="_Tools">
-                <MenuItem Header="_Properties" Command="{Binding PropertiesCommand}"
-                          IsEnabled="{Binding HasSelectedItem}"/>
+                <MenuItem Header="_Properties" Command="{Binding PropertiesCommand}" IsEnabled="{Binding HasSelectedItem}"/>
+                <!--<Separator/>-->
+                <MenuItem Header="_Format Partition (ext2/3/4)..." Click="MenuFormatPartition_Click"/>
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_About Linux Explorer" Click="MenuAbout_Click"/>

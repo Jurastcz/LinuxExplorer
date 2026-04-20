@@ -87,10 +87,13 @@ public sealed class DiskDiscoveryService
 
                 if (found)
                 {
+                    // Close the read-only handle before opening read-write
+                    diskAccess.Dispose();
+
                     // Create a new stream for the filesystem (will be owned by ExtFileSystemAccess)
-                    var fsAccess = new RawDiskAccess(diskPath, readOnly: true);
+                    var fsAccess = new RawDiskAccess(diskPath, readOnly: false);
                     var fsStream = new DiskStream(fsAccess);
-                    var fs = ExtFileSystemAccess.Open(fsStream, partitionVm.PartitionInfo.StartOffset, readOnly: true);
+                    var fs = ExtFileSystemAccess.Open(fsStream, partitionVm.PartitionInfo.StartOffset, readOnly: false);
                     partitionVm.Open(fs);
                     return;
                 }

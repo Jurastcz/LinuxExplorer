@@ -19,6 +19,9 @@ internal static partial class NativeMethods
     internal const int FILE_CURRENT = 1;
     internal const int FILE_END = 2;
 
+    internal const uint FSCTL_LOCK_VOLUME = 0x00090018;
+    internal const uint FSCTL_DISMOUNT_VOLUME = 0x00090020;
+
     internal static readonly nint INVALID_HANDLE_VALUE = new nint(-1);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -68,6 +71,18 @@ internal static partial class NativeMethods
         nint lpInBuffer,
         uint nInBufferSize,
         nint lpOutBuffer,
+        uint nOutBufferSize,
+        out uint lpBytesReturned,
+        nint lpOverlapped);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DeviceIoControl(
+        nint hDevice,
+        uint dwIoControlCode,
+        nint lpInBuffer,
+        uint nInBufferSize,
+        [Out] byte[] lpOutBuffer,
         uint nOutBufferSize,
         out uint lpBytesReturned,
         nint lpOverlapped);

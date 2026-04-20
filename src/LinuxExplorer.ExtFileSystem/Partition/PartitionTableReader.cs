@@ -69,14 +69,18 @@ public sealed class PartitionTableReader
             var entry = MbrPartitionEntry.Parse(mbr, 446 + i * 16);
             if (entry.LbaCount == 0) continue;
 
+            long startOffset = (long)entry.LbaStart * SectorSize;
+            bool isExt = IsExtFilesystemAtOffset(startOffset);
+            string? label = isExt ? TryReadExtVolumeLabel(startOffset) : null;
+
             partitions.Add(new PartitionInfo
             {
                 Index = idx++,
-                StartOffset = (long)entry.LbaStart * SectorSize,
+                StartOffset = startOffset,
                 Size = (long)entry.LbaCount * SectorSize,
                 PartitionType = $"0x{entry.Type:X2}",
-                IsExtFilesystem = IsExtFilesystemAtOffset((long)entry.LbaStart * SectorSize),
-                Label = null
+                IsExtFilesystem = isExt,
+                Label = label
             });
         }
 
@@ -108,6 +112,15 @@ public sealed class PartitionTableReader
             long startOffset = (long)entry.StartLba * SectorSize;
             bool isExt = IsExtFilesystemAtOffset(startOffset);
 
+            // Prefer ext volume label over GPT partition name
+            string? label = entry.Name;
+            if (isExt)
+            {
+                string? extLabel = TryReadExtVolumeLabel(startOffset);
+                if (!string.IsNullOrEmpty(extLabel))
+                    label = extLabel;
+            }
+
             partitions.Add(new PartitionInfo
             {
                 Index = idx++,
@@ -115,7 +128,7 @@ public sealed class PartitionTableReader
                 Size = (long)(entry.EndLba - entry.StartLba + 1) * SectorSize,
                 PartitionType = entry.TypeGuid.ToString("D").ToUpperInvariant(),
                 IsExtFilesystem = isExt,
-                Label = entry.Name
+                Label = label
             });
         }
         return partitions;
@@ -137,6 +150,29 @@ public sealed class PartitionTableReader
         catch
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Tries to read the volume label from an ext2/3/4 filesystem at the given offset.
+    /// </summary>
+    /// <param name="startOffset">The offset at which to read the superblock.</param>
+    /// <returns>The volume label if found and non-empty, otherwise null.</returns>
+    private string? TryReadExtVolumeLabel(long startOffset)
+    {
+        try
+        {
+            byte[] data = _stream.ReadAt(startOffset + Superblock.SuperblockOffset, Superblock.SuperblockSize);
+            ushort magic = BitConverter.ToUInt16(data, 56);
+            if (magic != Superblock.Ext2Magic)
+                return null;
+
+            var sb = Superblock.Parse(data);
+            return string.IsNullOrEmpty(sb.VolumeName) ? null : sb.VolumeName;
+        }
+        catch
+        {
+            return null;
         }
     }
     /// <summary>

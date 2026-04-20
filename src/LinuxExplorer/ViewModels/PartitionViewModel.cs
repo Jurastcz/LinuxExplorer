@@ -43,7 +43,10 @@ public sealed partial class PartitionViewModel : ObservableObject
     public PartitionViewModel(PartitionInfo info)
     {
         _partitionInfo = info;
-        DisplayName = $"Part {info.Index + 1} ({FormatSize(info.Size)})";
+        string displayName = $"Part {info.Index + 1} ({FormatSize(info.Size)})";
+        if (!string.IsNullOrEmpty(info.Label))
+            displayName = $"{info.Label} - {displayName}";
+        DisplayName = displayName;
     }
 
     /// <summary>Opens the filesystem for access.</summary>

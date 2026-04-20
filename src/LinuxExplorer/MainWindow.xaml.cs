@@ -24,6 +24,12 @@ public partial class MainWindow : Window
 
     private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
 
+    private void MenuFormatPartition_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Views.FormatDialog { Owner = this };
+        dialog.ShowDialog();
+    }
+
     private void MenuAbout_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
