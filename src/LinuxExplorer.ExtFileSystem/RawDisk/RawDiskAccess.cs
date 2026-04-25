@@ -83,6 +83,20 @@ public sealed class RawDiskAccess : IDisposable
             throw new IOException($"Failed to write {data.Length} bytes at offset {offset}: {new Win32Exception().Message}");
     }
 
+    /// <summary>
+    /// Notifies the OS to re-read the partition table on this disk.
+    /// This causes Windows to dismount stale volumes so their data areas can be written.
+    /// </summary>
+    public void UpdateDiskProperties()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        NativeMethods.DeviceIoControl(
+            _handle,
+            NativeMethods.IOCTL_DISK_UPDATE_PROPERTIES,
+            nint.Zero, 0, nint.Zero, 0,
+            out _, nint.Zero);
+    }
+
     private void Seek(long offset)
     {
         int high = (int)(offset >> 32);

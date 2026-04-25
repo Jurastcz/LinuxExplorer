@@ -72,10 +72,27 @@ public sealed partial class FormatViewModel : ObservableObject
 
     public bool HasPartitions => SelectedDisk?.Partitions.Count > 0;
 
-    /// <summary>Gets the free (unpartitioned) space on the selected disk.</summary>
-    public long FreeSpace => SelectedDisk != null
-        ? SelectedDisk.DiskSize - SelectedDisk.Partitions.Sum(p => p.Size)
-        : 0;
+    private const long Alignment = 1_048_576; // 1 MiB
+
+    /// <summary>Gets the actual usable free space after accounting for MBR alignment gaps.</summary>
+    public long FreeSpace
+    {
+        get
+        {
+            if (SelectedDisk is not { } disk || disk.DiskSize <= 0) return 0;
+
+            // Calculate where the next partition would start (aligned to 1 MiB)
+            long nextStart = Alignment; // first partition starts at 1 MiB
+            if (disk.Partitions.Count > 0)
+            {
+                long lastEnd = disk.Partitions.Max(p => p.StartOffset + p.Size);
+                nextStart = ((lastEnd + Alignment - 1) / Alignment) * Alignment;
+            }
+
+            long available = disk.DiskSize - nextStart;
+            return available > 0 ? available : 0;
+        }
+    }
 
     /// <summary>Gets the free space formatted as a string.</summary>
     public string FreeSpaceText => SelectedDisk != null
@@ -186,9 +203,109 @@ public sealed partial class FormatViewModel : ObservableObject
         OnPropertyChanged(nameof(HasPartitions));
         OnPropertyChanged(nameof(FreeSpace));
         OnPropertyChanged(nameof(FreeSpaceText));
+        _selectedSizeUnit = FreeSpace >= 1_073_741_824 ? "GB" : "MB";
+        OnPropertyChanged(nameof(SelectedSizeUnit));
         OnPropertyChanged(nameof(MaxPartitionSize));
-        _newPartitionSize = Math.Round(Math.Min(_newPartitionSize, MaxPartitionSize), 2);
+        _newPartitionSize = Math.Round(MaxPartitionSize, 2);
         OnPropertyChanged(nameof(NewPartitionSize));
+        OnPropertyChanged(nameof(NewPartitionSizeBytes));
+    }
+
+    [RelayCommand]
+    private void DeletePartition()
+    {
+        if (SelectedPartition is not { } partition) return;
+        if (SelectedDisk is not { } disk) return;
+
+        var result = System.Windows.MessageBox.Show(
+            $"WARNING: This will DELETE the partition entry and ERASE all data in it!\n\n" +
+            $"Partition: {partition.DisplayName}\n\n" +
+            $"Are you absolutely sure?",
+            "Confirm Delete Partition",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Warning);
+
+        if (result != System.Windows.MessageBoxResult.Yes) return;
+
+        try
+        {
+            using var diskAccess = new RawDiskAccess(disk.DiskPath, readOnly: false);
+            var stream = new DiskStream(diskAccess);
+
+            byte[] mbr = stream.ReadAt(0, 512);
+
+            long startSector = partition.StartOffset / 512;
+            bool found = false;
+            for (int i = 0; i < 4; i++)
+            {
+                int off = 446 + i * 16;
+                uint lbaStart = BitConverter.ToUInt32(mbr, off + 8);
+                uint lbaCount = BitConverter.ToUInt32(mbr, off + 12);
+                if (lbaCount == 0) continue;
+                if (lbaStart == (uint)startSector)
+                {
+                    Array.Clear(mbr, off, 16);
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                System.Windows.MessageBox.Show("Could not find matching partition entry in MBR.",
+                    "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                return;
+            }
+
+            stream.WriteAt(0, mbr);
+
+            // Tell the OS to re-read the partition table — this dismounts any stale volume
+            // that was sitting on the deleted partition, freeing its data area for writing.
+            diskAccess.UpdateDiskProperties();
+
+            // Small delay to let Windows finish dismounting the volume.
+            System.Threading.Thread.Sleep(500);
+
+            // Zero out the first 1 MiB of the partition to wipe filesystem signatures
+            // (superblock, journal, etc.). With the volume dismounted this should succeed.
+            try
+            {
+                const int wipeSize = 1_048_576; // 1 MiB
+                long actualWipe = Math.Min(wipeSize, partition.Size);
+                // Must be sector-aligned
+                actualWipe = (actualWipe / 512) * 512;
+                if (actualWipe > 0)
+                {
+                    byte[] zeros = new byte[actualWipe];
+                    stream.WriteAt(partition.StartOffset, zeros);
+                }
+            }
+            catch
+            {
+                // Still can't write — MBR entry is already cleared so the partition
+                // won't be re-discovered. Old filesystem data will be overwritten on next format.
+            }
+
+            disk.Partitions.Remove(partition);
+            Partitions.Remove(partition);
+            SelectedPartition = Partitions.FirstOrDefault();
+            OnPropertyChanged(nameof(HasPartitions));
+            OnPropertyChanged(nameof(FreeSpace));
+            OnPropertyChanged(nameof(FreeSpaceText));
+            _selectedSizeUnit = FreeSpace >= 1_073_741_824 ? "GB" : "MB";
+            OnPropertyChanged(nameof(SelectedSizeUnit));
+            OnPropertyChanged(nameof(MaxPartitionSize));
+            _newPartitionSize = Math.Round(MaxPartitionSize, 2);
+            OnPropertyChanged(nameof(NewPartitionSize));
+            OnPropertyChanged(nameof(NewPartitionSizeBytes));
+
+            StatusMessage = $"Partition deleted. Free space: {FormatSize(FreeSpace)}";
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Failed to delete partition:\n{ex.Message}", "Error",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+        }
     }
 
     [RelayCommand]
@@ -259,7 +376,16 @@ public sealed partial class FormatViewModel : ObservableObject
     private void CreatePartition()
     {
         if (SelectedDisk is not { } disk) return;
-        if (NewPartitionSizeBytes <= 0 || NewPartitionSizeBytes > FreeSpace) return;
+
+        if (NewPartitionSizeBytes <= 0 || NewPartitionSizeBytes > FreeSpace)
+        {
+            System.Windows.MessageBox.Show(
+                $"Requested size ({FormatSize(NewPartitionSizeBytes)}) exceeds available free space ({FormatSize(FreeSpace)}).\n\nReduce the partition size.",
+                "Invalid Size",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Warning);
+            return;
+        }
 
         var result = System.Windows.MessageBox.Show(
             $"Create a new MBR partition on {disk.DisplayName}?\n\n" +
@@ -351,7 +477,12 @@ public sealed partial class FormatViewModel : ObservableObject
             OnPropertyChanged(nameof(HasPartitions));
             OnPropertyChanged(nameof(FreeSpace));
             OnPropertyChanged(nameof(FreeSpaceText));
+            _selectedSizeUnit = FreeSpace >= 1_073_741_824 ? "GB" : "MB";
+            OnPropertyChanged(nameof(SelectedSizeUnit));
             OnPropertyChanged(nameof(MaxPartitionSize));
+            _newPartitionSize = Math.Round(MaxPartitionSize, 2);
+            OnPropertyChanged(nameof(NewPartitionSize));
+            OnPropertyChanged(nameof(NewPartitionSizeBytes));
 
             StatusMessage = $"Partition created: {FormatSize(NewPartitionSizeBytes)} at offset {FormatSize(startOffset)}";
         }

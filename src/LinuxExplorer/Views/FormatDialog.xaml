@@ -39,10 +39,19 @@
         <!-- Partition selection -->
         <TextBlock Grid.Row="2" Text="Partition:" FontWeight="SemiBold" Margin="0,0,0,4"
                    Visibility="{Binding HasPartitions, Converter={StaticResource BoolToVis}}"/>
-        <ComboBox Grid.Row="3" ItemsSource="{Binding Partitions}" SelectedItem="{Binding SelectedPartition}"
-                   DisplayMemberPath="DisplayName" Margin="0,0,0,8"
-                   IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"
-                   Visibility="{Binding HasPartitions, Converter={StaticResource BoolToVis}}"/>
+        <Grid Grid.Row="3" Margin="0,0,0,8"
+              Visibility="{Binding HasPartitions, Converter={StaticResource BoolToVis}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <ComboBox Grid.Column="0" ItemsSource="{Binding Partitions}" SelectedItem="{Binding SelectedPartition}"
+                      DisplayMemberPath="DisplayName" Margin="0,0,6,0"
+                      IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"/>
+            <Button Grid.Column="1" Content="Delete Partition" Command="{Binding DeletePartitionCommand}"
+                    Style="{StaticResource PrimaryButtonStyle}"
+                    IsEnabled="{Binding IsFormatting, Converter={StaticResource InvertBool}}"/>
+        </Grid>
 
         <!-- Create partition panel -->
         <GroupBox Grid.Row="4" Header="Create Partition" Margin="0,0,0,8"

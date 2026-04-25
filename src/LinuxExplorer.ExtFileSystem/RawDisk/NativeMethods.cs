@@ -21,6 +21,7 @@ internal static partial class NativeMethods
 
     internal const uint FSCTL_LOCK_VOLUME = 0x00090018;
     internal const uint FSCTL_DISMOUNT_VOLUME = 0x00090020;
+    internal const uint IOCTL_DISK_UPDATE_PROPERTIES = 0x00070140;
 
     internal static readonly nint INVALID_HANDLE_VALUE = new nint(-1);
 
