@@ -7,10 +7,20 @@
     <LangVersion>12</LangVersion>
     <UseWPF>true</UseWPF>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>LinuxExplorer</AssemblyName>
     <RootNamespace>LinuxExplorer</RootNamespace>
+    <StartupObject>LinuxExplorer.App</StartupObject>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Resources\LinuxExplorer.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="LinuxExplorer.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\LinuxExplorer.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
@@ -19,6 +29,25 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LinuxExplorer.ExtFileSystem\LinuxExplorer.ExtFileSystem.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="LinuxExplorer.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>
