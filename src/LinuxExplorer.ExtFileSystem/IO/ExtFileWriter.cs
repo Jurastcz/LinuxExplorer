@@ -133,6 +133,87 @@ public sealed class ExtFileWriter
         return newInodeNo;
     }
 
+    /// <summary>
+    /// Removes a directory entry from the parent directory.
+    /// This is a basic unlink operation (inode/block reclamation is not performed).
+    /// </summary>
+    public bool DeleteEntry(uint parentInodeNo, Inode parentInode, string name)
+    {
+        byte[] dirData = _reader.ReadDirectoryBlocks(parentInode);
+
+        int offset = 0;
+        while (offset + DirectoryEntry.MinEntrySize <= dirData.Length)
+        {
+            var entry = DirectoryEntry.Parse(dirData, offset);
+            if (entry == null || entry.RecLen == 0) break;
+
+            if (entry.InodeNumber != 0 && entry.Name == name)
+            {
+                Array.Clear(dirData, offset, 4); // inode = 0 (unused)
+                dirData[offset + 6] = 0;         // name_len
+                dirData[offset + 7] = 0;         // file_type
+                WriteDirectoryBlocksBack(parentInode, dirData, parentInodeNo);
+                return true;
+            }
+
+            offset += entry.RecLen;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Moves or renames an entry by creating a new directory entry and deleting the old one.
+    /// </summary>
+    public bool MoveOrRenameEntry(
+        uint sourceParentInodeNo,
+        Inode sourceParentInode,
+        string sourceName,
+        uint targetParentInodeNo,
+        Inode targetParentInode,
+        string targetName)
+    {
+        var sourceEntry = TryFindEntry(sourceParentInode, sourceName);
+        if (sourceEntry == null)
+            return false;
+
+        if (TryFindEntry(targetParentInode, targetName) != null)
+            throw new IOException($"Entry '{targetName}' already exists.");
+
+        AddDirectoryEntry(targetParentInodeNo, targetParentInode, targetName, sourceEntry.Value.Entry.InodeNumber, sourceEntry.Value.Entry.FileType);
+        DeleteEntry(sourceParentInodeNo, sourceParentInode, sourceName);
+        return true;
+    }
+
+    /// <summary>
+    /// Returns whether an entry with the given name exists in the parent directory.
+    /// </summary>
+    public bool EntryExists(Inode parentInode, string name) => TryFindEntry(parentInode, name) != null;
+
+    /// <summary>
+    /// Gets the file type for an entry in the parent directory, if present.
+    /// </summary>
+    public FileType? GetEntryFileType(Inode parentInode, string name) => TryFindEntry(parentInode, name)?.Entry.FileType;
+
+    private (int Offset, DirectoryEntry Entry)? TryFindEntry(Inode parentInode, string name)
+    {
+        byte[] dirData = _reader.ReadDirectoryBlocks(parentInode);
+        int offset = 0;
+
+        while (offset + DirectoryEntry.MinEntrySize <= dirData.Length)
+        {
+            var entry = DirectoryEntry.Parse(dirData, offset);
+            if (entry == null || entry.RecLen == 0) break;
+
+            if (entry.InodeNumber != 0 && entry.Name == name)
+                return (offset, entry);
+
+            offset += entry.RecLen;
+        }
+
+        return null;
+    }
+
     private void AddDirectoryEntry(uint parentInodeNo, Inode parentInode, string name, uint inodeNo, FileType fileType)
     {
         byte[] dirData = _reader.ReadDirectoryBlocks(parentInode);

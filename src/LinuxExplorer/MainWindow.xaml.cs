@@ -58,7 +58,10 @@ public partial class MainWindow : Window
 
     private void ListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        // Selection is already bound via SelectedItem
+        if (sender is ListView listView)
+        {
+            ViewModel.UpdateSelectedItems(listView.SelectedItems.Cast<FileSystemItemViewModel>());
+        }
     }
 
     private void TreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)

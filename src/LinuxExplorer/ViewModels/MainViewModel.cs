@@ -11,11 +11,20 @@ namespace LinuxExplorer.ViewModels;
 /// </summary>
 public sealed partial class MainViewModel : ObservableObject
 {
+    private sealed class ClipboardEntry
+    {
+        public required string SourceDirectory { get; init; }
+        public required string Name { get; init; }
+        public required bool IsDirectory { get; init; }
+    }
+
     private readonly DiskDiscoveryService _diskDiscovery;
     private readonly FileOperationService _fileOps;
     private readonly Stack<string> _backStack = new();
     private readonly Stack<string> _forwardStack = new();
     private PartitionViewModel? _currentPartition;
+    private List<ClipboardEntry> _clipboardEntries = [];
+    private bool _isCutClipboard;
 
     /// <summary>Gets the list of discovered disks.</summary>
     [ObservableProperty]
@@ -30,7 +39,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Gets or sets the selected item.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedItem))]
+    [NotifyPropertyChangedFor(nameof(HasSelectedItems))]
     private FileSystemItemViewModel? _selectedItem;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedItems))]
+    private ObservableCollection<FileSystemItemViewModel> _selectedItems = [];
 
     /// <summary>Gets or sets the current path.</summary>
     [ObservableProperty]
@@ -58,6 +72,12 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Gets whether an item is selected.</summary>
     public bool HasSelectedItem => SelectedItem != null;
+
+    /// <summary>Gets whether any item is selected.</summary>
+    public bool HasSelectedItems => SelectedItems.Count > 0 || SelectedItem != null;
+
+    /// <summary>Gets whether clipboard has items to paste.</summary>
+    public bool HasClipboardItems => _clipboardEntries.Count > 0;
 
     /// <summary>Gets whether a writable filesystem is active.</summary>
     public bool IsWritableFilesystem => _currentPartition?.Filesystem is { IsReadOnly: false };
@@ -388,16 +408,189 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task Delete()
     {
-        if (SelectedItem == null) return;
+        if (_currentPartition?.Filesystem == null || !IsWritableFilesystem) return;
+
+        var targets = GetSelectedTargets();
+        if (targets.Count == 0) return;
+
         var result = System.Windows.MessageBox.Show(
-            $"Are you sure you want to delete '{SelectedItem.Name}'?",
+            targets.Count == 1
+                ? $"Are you sure you want to delete '{targets[0].Name}'?"
+                : $"Are you sure you want to delete {targets.Count} selected items?",
             "Confirm Delete",
             System.Windows.MessageBoxButton.YesNo,
             System.Windows.MessageBoxImage.Warning);
 
         if (result != System.Windows.MessageBoxResult.Yes) return;
-        StatusMessage = "Delete operation is not yet implemented.";
-        await Task.CompletedTask;
+
+        IsLoading = true;
+        try
+        {
+            await Task.Run(() =>
+            {
+                foreach (var item in targets)
+                {
+                    _currentPartition.Filesystem.DeleteEntry(CurrentPath, item.Name);
+                }
+            });
+            await Refresh();
+            StatusMessage = "Delete completed.";
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Failed to delete item(s): {ex.Message}", "Error",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private void Copy()
+    {
+        var targets = GetSelectedTargets();
+        if (targets.Count == 0) return;
+
+        _clipboardEntries = targets
+            .Select(i => new ClipboardEntry
+            {
+                SourceDirectory = CurrentPath,
+                Name = i.Name,
+                IsDirectory = i.IsDirectory
+            })
+            .ToList();
+        _isCutClipboard = false;
+        OnPropertyChanged(nameof(HasClipboardItems));
+        StatusMessage = targets.Count == 1 ? $"Copied '{targets[0].Name}'." : $"Copied {targets.Count} items.";
+    }
+
+    [RelayCommand]
+    private void Cut()
+    {
+        if (_currentPartition?.Filesystem == null || !IsWritableFilesystem) return;
+
+        var targets = GetSelectedTargets();
+        if (targets.Count == 0) return;
+
+        _clipboardEntries = targets
+            .Select(i => new ClipboardEntry
+            {
+                SourceDirectory = CurrentPath,
+                Name = i.Name,
+                IsDirectory = i.IsDirectory
+            })
+            .ToList();
+        _isCutClipboard = true;
+        OnPropertyChanged(nameof(HasClipboardItems));
+        StatusMessage = targets.Count == 1 ? $"Cut '{targets[0].Name}'." : $"Cut {targets.Count} items.";
+    }
+
+    [RelayCommand]
+    private async Task Paste()
+    {
+        if (_currentPartition?.Filesystem == null || !IsWritableFilesystem || _clipboardEntries.Count == 0) return;
+
+        bool skippedDirectories = false;
+        IsLoading = true;
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                foreach (var entry in _clipboardEntries)
+                {
+                    if (entry.IsDirectory)
+                    {
+                        skippedDirectories = true;
+                        continue;
+                    }
+
+                    if (_isCutClipboard)
+                    {
+                        if (entry.SourceDirectory == CurrentPath)
+                            continue;
+
+                        string moveTargetName = EnsureUniqueName(_currentPartition.Filesystem, CurrentPath, entry.Name);
+                        _currentPartition.Filesystem.MoveOrRenameEntry(entry.SourceDirectory, entry.Name, CurrentPath, moveTargetName);
+                    }
+                    else
+                    {
+                        string sourcePath = CombinePath(entry.SourceDirectory, entry.Name);
+                        byte[] data = _currentPartition.Filesystem.ReadFile(sourcePath);
+
+                        string copyTargetName = entry.SourceDirectory == CurrentPath
+                            ? GenerateWindowsCopyName(_currentPartition.Filesystem, CurrentPath, entry.Name)
+                            : EnsureUniqueName(_currentPartition.Filesystem, CurrentPath, entry.Name);
+
+                        _currentPartition.Filesystem.WriteFile(CurrentPath, copyTargetName, data);
+                    }
+                }
+            });
+
+            if (_isCutClipboard)
+            {
+                _clipboardEntries = [];
+                _isCutClipboard = false;
+                OnPropertyChanged(nameof(HasClipboardItems));
+            }
+
+            await Refresh();
+            StatusMessage = "Paste completed.";
+
+            if (skippedDirectories)
+            {
+                System.Windows.MessageBox.Show("Copy/Cut for directories is not supported yet.", "Not Supported",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Paste failed: {ex.Message}", "Error",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task Rename()
+    {
+        if (_currentPartition?.Filesystem == null || !IsWritableFilesystem) return;
+
+        var targets = GetSelectedTargets();
+        if (targets.Count != 1)
+        {
+            System.Windows.MessageBox.Show("Rename requires a single selected item.", "Rename",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            return;
+        }
+
+        var item = targets[0];
+        string? newName = PromptForInput("Rename", "Enter new name:", item.Name);
+        if (string.IsNullOrWhiteSpace(newName) || newName == item.Name) return;
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                if (_currentPartition.Filesystem.EntryExists(CurrentPath, newName))
+                    throw new IOException($"An entry named '{newName}' already exists.");
+
+                _currentPartition.Filesystem.MoveOrRenameEntry(CurrentPath, item.Name, CurrentPath, newName);
+            });
+
+            await Refresh();
+            StatusMessage = "Rename completed.";
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Rename failed: {ex.Message}", "Error",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+        }
     }
 
     [RelayCommand]
@@ -442,6 +635,69 @@ public sealed partial class MainViewModel : ObservableObject
         // Handled by ListView
     }
 
+    public void UpdateSelectedItems(IEnumerable<FileSystemItemViewModel> items)
+    {
+        SelectedItems = new ObservableCollection<FileSystemItemViewModel>(items);
+        if (SelectedItems.Count == 1)
+            SelectedItem = SelectedItems[0];
+        else if (SelectedItems.Count == 0)
+            SelectedItem = null;
+
+        OnPropertyChanged(nameof(HasSelectedItems));
+    }
+
+    private List<FileSystemItemViewModel> GetSelectedTargets()
+    {
+        if (SelectedItems.Count > 0)
+            return SelectedItems.ToList();
+        return SelectedItem != null ? [SelectedItem] : [];
+    }
+
+    private static string CombinePath(string parent, string name) =>
+        parent == "/" ? $"/{name}" : $"{parent.TrimEnd('/')}/{name}";
+
+    private static string EnsureUniqueName(LinuxExplorer.ExtFileSystem.Navigation.ExtFileSystemAccess fs, string parentPath, string baseName)
+    {
+        if (!fs.EntryExists(parentPath, baseName)) return baseName;
+
+        string stem = System.IO.Path.GetFileNameWithoutExtension(baseName);
+        string ext = System.IO.Path.GetExtension(baseName);
+
+        for (int i = 2; i < 10_000; i++)
+        {
+            string candidate = string.IsNullOrEmpty(ext)
+                ? $"{stem} ({i})"
+                : $"{stem} ({i}){ext}";
+            if (!fs.EntryExists(parentPath, candidate))
+                return candidate;
+        }
+
+        throw new IOException("Cannot generate unique file name.");
+    }
+
+    private static string GenerateWindowsCopyName(LinuxExplorer.ExtFileSystem.Navigation.ExtFileSystemAccess fs, string parentPath, string originalName)
+    {
+        string stem = System.IO.Path.GetFileNameWithoutExtension(originalName);
+        string ext = System.IO.Path.GetExtension(originalName);
+
+        string candidate = string.IsNullOrEmpty(ext)
+            ? $"{stem} - Copy"
+            : $"{stem} - Copy{ext}";
+        if (!fs.EntryExists(parentPath, candidate))
+            return candidate;
+
+        for (int i = 2; i < 10_000; i++)
+        {
+            candidate = string.IsNullOrEmpty(ext)
+                ? $"{stem} - Copy ({i})"
+                : $"{stem} - Copy ({i}){ext}";
+            if (!fs.EntryExists(parentPath, candidate))
+                return candidate;
+        }
+
+        throw new IOException("Cannot generate copy name.");
+    }
+
     private void ShowProperties(FileSystemItemViewModel item)
     {
         var vm = PropertiesViewModel.FromItem(item);
@@ -449,28 +705,74 @@ public sealed partial class MainViewModel : ObservableObject
         dialog.ShowDialog();
     }
 
-    private static string? PromptForInput(string title, string prompt)
+    private static string? PromptForInput(string title, string prompt, string initialValue = "")
     {
-        // Simple input dialog using an InputBox-style approach
+        // Simple input dialog using app theme resources
         var window = new System.Windows.Window
         {
             Title = title,
-            Width = 320,
-            Height = 140,
+            Width = 380,
+            Height = 170,
             WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
             ResizeMode = System.Windows.ResizeMode.NoResize,
-            Owner = System.Windows.Application.Current.MainWindow
+            Owner = System.Windows.Application.Current.MainWindow,
+            Background = System.Windows.Application.Current.TryFindResource("BackgroundBrush") as System.Windows.Media.Brush
+                ?? System.Windows.Media.Brushes.DimGray,
+            Foreground = System.Windows.Application.Current.TryFindResource("PrimaryTextBrush") as System.Windows.Media.Brush
+                ?? System.Windows.Media.Brushes.White
         };
 
-        var panel = new System.Windows.Controls.StackPanel { Margin = new System.Windows.Thickness(10) };
-        panel.Children.Add(new System.Windows.Controls.TextBlock { Text = prompt, Margin = new System.Windows.Thickness(0, 0, 0, 6) });
-        var textBox = new System.Windows.Controls.TextBox { Margin = new System.Windows.Thickness(0, 0, 0, 10) };
+        var border = new System.Windows.Controls.Border
+        {
+            Margin = new System.Windows.Thickness(6),
+            Padding = new System.Windows.Thickness(6),
+            CornerRadius = new System.Windows.CornerRadius(6),
+            Background = System.Windows.Application.Current.TryFindResource("SurfaceBrush") as System.Windows.Media.Brush
+                ?? System.Windows.Media.Brushes.Gray,
+            BorderBrush = System.Windows.Application.Current.TryFindResource("BorderBrush") as System.Windows.Media.Brush
+                ?? System.Windows.Media.Brushes.DarkGray,
+            BorderThickness = new System.Windows.Thickness(1)
+        };
+
+        var panel = new System.Windows.Controls.StackPanel();
+        panel.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = prompt,
+            Margin = new System.Windows.Thickness(0, 0, 0, 8),
+            Foreground = System.Windows.Application.Current.TryFindResource("SecondaryTextBrush") as System.Windows.Media.Brush
+                ?? System.Windows.Media.Brushes.Gainsboro
+        });
+
+        var textBox = new System.Windows.Controls.TextBox
+        {
+            Margin = new System.Windows.Thickness(0, 0, 0, 10),
+            Text = initialValue
+        };
+        if (System.Windows.Application.Current.TryFindResource("PathBarStyle") is System.Windows.Style pathBarStyle)
+            textBox.Style = pathBarStyle;
+
         panel.Children.Add(textBox);
-        var okBtn = new System.Windows.Controls.Button { Content = "OK", Width = 75, HorizontalAlignment = System.Windows.HorizontalAlignment.Right };
+
+        var okBtn = new System.Windows.Controls.Button
+        {
+            Content = "OK",
+            Width = 90,
+            VerticalContentAlignment = System.Windows.VerticalAlignment.Center,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Right
+        };
+        if (System.Windows.Application.Current.TryFindResource("PrimaryButtonStyle") is System.Windows.Style primaryButtonStyle)
+            okBtn.Style = primaryButtonStyle;
+
         okBtn.Click += (_, _) => { window.DialogResult = true; window.Close(); };
         panel.Children.Add(okBtn);
-        window.Content = panel;
-        textBox.Focus();
+
+        border.Child = panel;
+        window.Content = border;
+        window.Loaded += (_, _) =>
+        {
+            textBox.Focus();
+            textBox.SelectAll();
+        };
 
         return window.ShowDialog() == true ? textBox.Text : null;
     }

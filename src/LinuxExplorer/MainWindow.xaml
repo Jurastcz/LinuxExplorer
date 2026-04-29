@@ -11,6 +11,14 @@
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BackgroundBrush}">
 
+    <Window.InputBindings>
+        <KeyBinding Modifiers="Control" Key="C" Command="{Binding CopyCommand}"/>
+        <KeyBinding Modifiers="Control" Key="X" Command="{Binding CutCommand}"/>
+        <KeyBinding Modifiers="Control" Key="V" Command="{Binding PasteCommand}"/>
+        <KeyBinding Key="Delete" Command="{Binding DeleteCommand}"/>
+        <KeyBinding Key="F2" Command="{Binding RenameCommand}"/>
+    </Window.InputBindings>
+
     <Window.DataContext>
         <vm:MainViewModel/>
     </Window.DataContext>
@@ -41,6 +49,17 @@
                 <MenuItem Header="E_xit" Click="MenuExit_Click"/>
             </MenuItem>
             <MenuItem Header="_Edit">
+                <MenuItem Header="Cu_t" Command="{Binding CutCommand}" InputGestureText="Ctrl+X"
+                          IsEnabled="{Binding HasSelectedItems}"/>
+                <MenuItem Header="_Copy" Command="{Binding CopyCommand}" InputGestureText="Ctrl+C"
+                          IsEnabled="{Binding HasSelectedItems}"/>
+                <MenuItem Header="_Paste" Command="{Binding PasteCommand}" InputGestureText="Ctrl+V"
+                          IsEnabled="{Binding HasClipboardItems}"/>
+                <MenuItem Header="_Delete" Command="{Binding DeleteCommand}" InputGestureText="Del"
+                          IsEnabled="{Binding HasSelectedItems}"/>
+                <MenuItem Header="Re_name" Command="{Binding RenameCommand}" InputGestureText="F2"
+                          IsEnabled="{Binding HasSelectedItems}"/>
+                <Separator/>
                 <MenuItem Header="_Select All" Command="{Binding SelectAllCommand}"/>
             </MenuItem>
             <MenuItem Header="_View">
@@ -215,9 +234,31 @@
                                       IsEnabled="{Binding DataContext.IsWritableFilesystem,
                                       RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                             <Separator/>
+                            <MenuItem Header="Cu_t" Command="{Binding DataContext.CutCommand,
+                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      InputGestureText="Ctrl+X"
+                                      IsEnabled="{Binding DataContext.HasSelectedItems,
+                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="_Copy" Command="{Binding DataContext.CopyCommand,
+                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      InputGestureText="Ctrl+C"
+                                      IsEnabled="{Binding DataContext.HasSelectedItems,
+                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="_Paste" Command="{Binding DataContext.PasteCommand,
+                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      InputGestureText="Ctrl+V"
+                                      IsEnabled="{Binding DataContext.HasClipboardItems,
+                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <Separator/>
                             <MenuItem Header="_Delete" Command="{Binding DataContext.DeleteCommand,
                                       RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                      IsEnabled="{Binding DataContext.HasSelectedItem,
+                                      InputGestureText="Del"
+                                      IsEnabled="{Binding DataContext.HasSelectedItems,
+                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            <MenuItem Header="Re_name" Command="{Binding DataContext.RenameCommand,
+                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      InputGestureText="F2"
+                                      IsEnabled="{Binding DataContext.HasSelectedItems,
                                       RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                             <MenuItem Header="New _Folder" Command="{Binding DataContext.NewFolderCommand,
                                       RelativeSource={RelativeSource AncestorType=ContextMenu}}"

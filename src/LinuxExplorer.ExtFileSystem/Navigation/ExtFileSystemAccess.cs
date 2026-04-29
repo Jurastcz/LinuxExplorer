@@ -140,6 +140,61 @@ public sealed class ExtFileSystemAccess : IDisposable
     }
 
     /// <summary>
+    /// Deletes an entry in a directory.
+    /// This basic implementation removes only the directory entry.
+    /// </summary>
+    public bool DeleteEntry(string parentPath, string name)
+    {
+        if (FileWriter == null) throw new InvalidOperationException("Filesystem is read-only.");
+        uint parentInodeNo = PathResolver.ResolvePath(parentPath);
+        Inode parentInode = PathResolver.ReadInode(parentInodeNo);
+        return FileWriter.DeleteEntry(parentInodeNo, parentInode, name);
+    }
+
+    /// <summary>
+    /// Renames or moves an entry between directories.
+    /// </summary>
+    public bool MoveOrRenameEntry(string sourceParentPath, string sourceName, string targetParentPath, string targetName)
+    {
+        if (FileWriter == null) throw new InvalidOperationException("Filesystem is read-only.");
+
+        uint sourceParentInodeNo = PathResolver.ResolvePath(sourceParentPath);
+        Inode sourceParentInode = PathResolver.ReadInode(sourceParentInodeNo);
+        uint targetParentInodeNo = PathResolver.ResolvePath(targetParentPath);
+        Inode targetParentInode = PathResolver.ReadInode(targetParentInodeNo);
+
+        return FileWriter.MoveOrRenameEntry(
+            sourceParentInodeNo,
+            sourceParentInode,
+            sourceName,
+            targetParentInodeNo,
+            targetParentInode,
+            targetName);
+    }
+
+    /// <summary>
+    /// Checks whether an entry exists in the given directory.
+    /// </summary>
+    public bool EntryExists(string parentPath, string name)
+    {
+        if (FileWriter == null) throw new InvalidOperationException("Filesystem is read-only.");
+        uint parentInodeNo = PathResolver.ResolvePath(parentPath);
+        Inode parentInode = PathResolver.ReadInode(parentInodeNo);
+        return FileWriter.EntryExists(parentInode, name);
+    }
+
+    /// <summary>
+    /// Returns entry type for a name in a directory, if present.
+    /// </summary>
+    public FileType? GetEntryFileType(string parentPath, string name)
+    {
+        if (FileWriter == null) throw new InvalidOperationException("Filesystem is read-only.");
+        uint parentInodeNo = PathResolver.ResolvePath(parentPath);
+        Inode parentInode = PathResolver.ReadInode(parentInodeNo);
+        return FileWriter.GetEntryFileType(parentInode, name);
+    }
+
+    /// <summary>
     /// Gets formatted free space information for the filesystem.
     /// </summary>
     public long GetFreeBytes() =>
