@@ -318,32 +318,40 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task CopyToWindows()
     {
-        if (SelectedItem == null || _currentPartition?.Filesystem == null) return;
-        if (SelectedItem.IsDirectory)
+        if (_currentPartition?.Filesystem == null) return;
+
+        var targets = GetSelectedTargets();
+        if (targets.Count == 0) return;
+
+        var files = targets.Where(t => !t.IsDirectory).ToList();
+        bool skippedDirectories = files.Count != targets.Count;
+        if (files.Count == 0)
         {
             System.Windows.MessageBox.Show("Directory copying is not supported yet.", "Not Supported",
                 System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
             return;
         }
 
-        var dialog = new Microsoft.Win32.SaveFileDialog
+        if (files.Count == 1)
         {
-            FileName = SelectedItem.Name,
-            Title = "Save file to Windows"
-        };
+            var singleDialog = new Microsoft.Win32.SaveFileDialog
+            {
+                FileName = files[0].Name,
+                Title = "Save file to Windows"
+            };
 
-        if (dialog.ShowDialog() == true)
-        {
+            if (singleDialog.ShowDialog() != true) return;
+
             IsLoading = true;
-            StatusMessage = $"Copying {SelectedItem.Name}...";
+            StatusMessage = $"Copying {files[0].Name}...";
             try
             {
                 await Task.Run(() =>
                 {
-                    byte[] data = _currentPartition.Filesystem.ReadFile(SelectedItem.FullPath);
-                    System.IO.File.WriteAllBytes(dialog.FileName, data);
+                    byte[] data = _currentPartition.Filesystem.ReadFile(files[0].FullPath);
+                    System.IO.File.WriteAllBytes(singleDialog.FileName, data);
                 });
-                StatusMessage = $"Copied {SelectedItem.Name} successfully.";
+                StatusMessage = $"Copied {files[0].Name} successfully.";
             }
             catch (Exception ex)
             {
@@ -355,6 +363,53 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 IsLoading = false;
             }
+
+            if (skippedDirectories)
+            {
+                System.Windows.MessageBox.Show("Directories were skipped. Only files were copied.", "Not Supported",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            }
+
+            return;
+        }
+
+        var folderDialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select destination folder"
+        };
+
+        if (folderDialog.ShowDialog() != true) return;
+
+        IsLoading = true;
+        StatusMessage = $"Copying {files.Count} files...";
+        try
+        {
+            await Task.Run(() =>
+            {
+                foreach (var item in files)
+                {
+                    byte[] data = _currentPartition.Filesystem.ReadFile(item.FullPath);
+                    string destinationPath = EnsureUniqueWindowsFilePath(folderDialog.FolderName, item.Name);
+                    System.IO.File.WriteAllBytes(destinationPath, data);
+                }
+            });
+            StatusMessage = $"Copied {files.Count} files successfully.";
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Failed to copy files: {ex.Message}", "Error",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            StatusMessage = string.Empty;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+
+        if (skippedDirectories)
+        {
+            System.Windows.MessageBox.Show("Directories were skipped. Only files were copied.", "Not Supported",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
         }
     }
 
@@ -374,23 +429,31 @@ public sealed partial class MainViewModel : ObservableObject
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
             Title = "Select file to copy to partition",
-            Multiselect = false
+            Multiselect = true
         };
 
         if (dialog.ShowDialog() == true)
         {
             IsLoading = true;
-            StatusMessage = $"Writing {System.IO.Path.GetFileName(dialog.FileName)}...";
+            StatusMessage = dialog.FileNames.Length == 1
+                ? $"Writing {System.IO.Path.GetFileName(dialog.FileName)}..."
+                : $"Writing {dialog.FileNames.Length} files...";
             try
             {
                 await Task.Run(() =>
                 {
-                    byte[] data = System.IO.File.ReadAllBytes(dialog.FileName);
-                    string fileName = System.IO.Path.GetFileName(dialog.FileName);
-                    _currentPartition.Filesystem.WriteFile(CurrentPath, fileName, data);
+                    foreach (var sourcePath in dialog.FileNames)
+                    {
+                        byte[] data = System.IO.File.ReadAllBytes(sourcePath);
+                        string fileName = System.IO.Path.GetFileName(sourcePath);
+                        string targetName = EnsureUniqueName(_currentPartition.Filesystem, CurrentPath, fileName);
+                        _currentPartition.Filesystem.WriteFile(CurrentPath, targetName, data);
+                    }
                 });
                 await Refresh();
-                StatusMessage = "File written successfully.";
+                StatusMessage = dialog.FileNames.Length == 1
+                    ? "File written successfully."
+                    : $"{dialog.FileNames.Length} files written successfully.";
             }
             catch (Exception ex)
             {
@@ -696,6 +759,28 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         throw new IOException("Cannot generate copy name.");
+    }
+
+    private static string EnsureUniqueWindowsFilePath(string folderPath, string fileName)
+    {
+        string destinationPath = System.IO.Path.Combine(folderPath, fileName);
+        if (!System.IO.File.Exists(destinationPath))
+            return destinationPath;
+
+        string stem = System.IO.Path.GetFileNameWithoutExtension(fileName);
+        string ext = System.IO.Path.GetExtension(fileName);
+
+        for (int i = 2; i < 10_000; i++)
+        {
+            string candidateName = string.IsNullOrEmpty(ext)
+                ? $"{stem} ({i})"
+                : $"{stem} ({i}){ext}";
+            destinationPath = System.IO.Path.Combine(folderPath, candidateName);
+            if (!System.IO.File.Exists(destinationPath))
+                return destinationPath;
+        }
+
+        throw new IOException("Cannot generate unique destination path on Windows.");
     }
 
     private void ShowProperties(FileSystemItemViewModel item)

@@ -127,7 +127,7 @@
             <TreeView Grid.Column="0"
                       ItemsSource="{Binding Disks}"
                       SelectedItemChanged="TreeView_SelectedItemChanged"
-                      Style="{StaticResource NavigationTreeStyle}">
+                      Style="{StaticResource NavigationTreeStyle}" HorizontalAlignment="Left">
                 <TreeView.Resources>
                     <!-- Disk item template -->
                     <HierarchicalDataTemplate DataType="{x:Type vm:DiskViewModel}"
@@ -135,7 +135,7 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xEDA2;" FontFamily="Segoe MDL2 Assets" FontSize="14" Margin="0,0,5,0"
                                        Foreground="{StaticResource AccentBrush}"/>
-                            <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" HorizontalAlignment="Left"/>
                         </StackPanel>
                     </HierarchicalDataTemplate>
                     <!-- Partition item template -->
@@ -144,7 +144,7 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE7B8;" FontFamily="Segoe MDL2 Assets" FontSize="14" Margin="0,0,5,0"
                                        Foreground="{StaticResource AccentBrush}"/>
-                            <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" HorizontalAlignment="Left"/>
                         </StackPanel>
                     </HierarchicalDataTemplate>
                     <!-- Directory item template -->
@@ -153,7 +153,7 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" FontSize="14" Margin="0,0,5,0"
                                        Foreground="{StaticResource FolderIconBrush}"/>
-                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" HorizontalAlignment="Left"/>
                         </StackPanel>
                     </HierarchicalDataTemplate>
                 </TreeView.Resources>
